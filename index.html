@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Keuangan Origo</title>
+
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" href="icons/favicon.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="theme-color" content="#185fa5" />
+
+<link rel="stylesheet" href="css/style.css" />
+
+<!-- Supabase JS client (lewat CDN, tidak perlu proses build/npm) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+<div id="app-shell">
+
+  <!-- ===================== LAYAR LOGIN ===================== -->
+  <section id="screen-login" class="screen">
+    <div class="login-card">
+      <img src="icons/icon-192.png" alt="" class="login-logo" />
+      <h1>Keuangan Origo</h1>
+      <p class="muted">Masuk sesuai akun peran Anda.</p>
+
+      <label for="login-email">Email akun</label>
+      <input type="email" id="login-email" placeholder="kasir.batubulan@keuanganorigo.app" />
+
+      <label for="login-password">Kata sandi</label>
+      <input type="password" id="login-password" placeholder="Kata sandi" />
+
+      <button id="btn-login" class="btn-primary">Masuk</button>
+      <div id="login-error" class="error-text" hidden></div>
+      <p class="muted small">Belum ada akun? Buat lewat Supabase Dashboard mengikuti panduan di README.md.</p>
+    </div>
+  </section>
+
+  <!-- ===================== LAYAR APLIKASI ===================== -->
+  <section id="screen-app" class="screen" hidden>
+
+    <header id="app-header">
+      <div class="header-left">
+        <img src="icons/icon-192.png" alt="" class="header-logo" />
+        <div>
+          <div class="header-title">Keuangan Origo</div>
+          <div class="header-sub" id="header-user-info"></div>
+        </div>
+      </div>
+      <button id="btn-logout" class="btn-ghost">Keluar</button>
+    </header>
+
+    <nav id="tab-nav">
+      <button class="tab-btn active" data-tab="billing">Billing</button>
+      <button class="tab-btn" data-tab="kas">Kas Operasional</button>
+      <button class="tab-btn" data-tab="pengawasan" id="tab-btn-pengawasan" hidden>Persetujuan</button>
+      <button class="tab-btn" data-tab="pengaturan">Pengaturan</button>
+    </nav>
+
+    <div id="cabang-bar">
+      <label for="cabang-select">Cabang:</label>
+      <select id="cabang-select"></select>
+      <div id="tambah-cabang-wrap" hidden>
+        <button id="btn-tambah-cabang" class="btn-ghost small">+ Cabang baru</button>
+      </div>
+    </div>
+
+    <div id="date-bar">
+      <button id="btn-prev-day" class="btn-ghost" aria-label="Hari sebelumnya">&#8592;</button>
+      <span id="date-label"></span>
+      <button id="btn-next-day" class="btn-ghost" aria-label="Hari berikutnya">&#8594;</button>
+    </div>
+
+    <!-- ---------- TAB: BILLING ---------- -->
+    <section id="tab-billing" class="tab-panel">
+      <form id="form-transaksi" class="card" hidden>
+        <h2>Transaksi baru</h2>
+        <div class="form-grid">
+          <input type="text" id="f-nama" placeholder="Nama klien" required />
+          <input type="text" id="f-terapis" placeholder="Nama terapis" required />
+          <input type="text" id="f-harga" inputmode="numeric" placeholder="Harga (Rp)" required />
+          <select id="f-metode">
+            <option value="cash">Cash</option>
+            <option value="transfer">Transfer</option>
+            <option value="qris">QRIS</option>
+          </select>
+          <select id="f-status">
+            <option value="lunas">Lunas</option>
+            <option value="paket">Paket</option>
+            <option value="belum_bayar">Belum bayar</option>
+          </select>
+        </div>
+        <div id="form-tx-error" class="error-text" hidden></div>
+        <button type="submit" class="btn-primary">Simpan transaksi</button>
+      </form>
+
+      <div id="tx-list" class="card"></div>
+      <div id="tx-summary" class="summary-grid"></div>
+    </section>
+
+    <!-- ---------- TAB: KAS OPERASIONAL ---------- -->
+    <section id="tab-kas" class="tab-panel" hidden>
+      <div id="kas-saldo" class="card"></div>
+
+      <form id="form-kas" class="card" hidden>
+        <h2>Catat kas operasional</h2>
+        <div class="form-grid">
+          <select id="k-jenis">
+            <option value="pengeluaran">Pengeluaran (belanja)</option>
+            <option value="topup">Top-up dari owner</option>
+          </select>
+          <input type="text" id="k-keterangan" placeholder="Keterangan" required />
+          <input type="text" id="k-jumlah" inputmode="numeric" placeholder="Jumlah (Rp)" required />
+          <input type="text" id="k-kategori" placeholder="Kategori (opsional)" />
+          <select id="k-status-nota">
+            <option value="ada">Nota ada</option>
+            <option value="belum_ada">Nota belum ada</option>
+          </select>
+          <select id="k-status-barang">
+            <option value="sudah_diambil">Barang sudah diambil</option>
+            <option value="belum_diambil">Barang belum diambil</option>
+          </select>
+        </div>
+        <div id="form-kas-error" class="error-text" hidden></div>
+        <button type="submit" class="btn-primary">Simpan</button>
+      </form>
+
+      <div id="kas-list" class="card"></div>
+    </section>
+
+    <!-- ---------- TAB: PERSETUJUAN (khusus pengawas) ---------- -->
+    <section id="tab-pengawasan" class="tab-panel" hidden>
+      <div id="pengawasan-list" class="card"></div>
+    </section>
+
+    <!-- ---------- TAB: PENGATURAN ---------- -->
+    <section id="tab-pengaturan" class="tab-panel" hidden>
+      <div id="pengaturan-content" class="card"></div>
+    </section>
+
+  </section>
+
+</div>
+
+<!-- Template struk untuk cetak (disembunyikan, dipakai window.print) -->
+<div id="print-area" hidden></div>
+
+<script src="js/supabaseClient.js"></script>
+<script src="js/state.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/billing.js"></script>
+<script src="js/kasOperasional.js"></script>
+<script src="js/receipt.js"></script>
+<script src="js/pengaturan.js"></script>
+<script src="js/pengawasan.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
