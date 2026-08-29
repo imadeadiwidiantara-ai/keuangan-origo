@@ -210,7 +210,7 @@ async function ajukanHapusTransaksi(txId) {
 async function cetakStrukTransaksi(txId) {
   const t = billingCache.find((x) => x.id === txId);
   if (!t) return;
-  await supabaseClient.from("transaksi").update({ struk_dicetak: true }).eq("id", txId);
+  await supabaseClient.rpc("tandai_bukti_transaksi", { p_transaksi_id: txId, p_struk_dicetak: true });
   cetakStruk(t); // fungsi dari receipt.js — membuka dialog print browser
   await renderBillingTab();
 }
@@ -220,7 +220,7 @@ async function cetakStrukTransaksiBluetooth(txId) {
   if (!t) return;
   const berhasil = await cetakStrukBluetooth(t); // fungsi dari receipt.js
   if (berhasil) {
-    await supabaseClient.from("transaksi").update({ struk_dicetak: true }).eq("id", txId);
+    await supabaseClient.rpc("tandai_bukti_transaksi", { p_transaksi_id: txId, p_struk_dicetak: true });
     await renderBillingTab();
   }
 }
@@ -233,7 +233,7 @@ async function kirimEmailInvoice(txId) {
     return;
   }
 
-  const { error } = await supabaseClient.from("transaksi").update({ invoice_email: email }).eq("id", txId);
+  const { error } = await supabaseClient.rpc("tandai_bukti_transaksi", { p_transaksi_id: txId, p_invoice_email: email });
   if (error) { alert("Gagal menyimpan: " + error.message); return; }
 
   // Coba kirim sungguhan lewat Edge Function "send-invoice-email".
