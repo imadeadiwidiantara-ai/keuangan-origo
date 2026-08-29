@@ -62,7 +62,7 @@ function renderDateBar() {
 async function shiftDate(days) {
   const dt = new Date(AppState.selectedDate + "T00:00:00");
   dt.setDate(dt.getDate() + days);
-  AppState.selectedDate = dt.toISOString().slice(0, 10);
+  AppState.selectedDate = toLocalISODate(dt); // lihat catatan di state.js kenapa bukan toISOString()
   renderDateBar();
 
   // Kunci tombol panah sementara + tampilkan status "Memuat..." supaya

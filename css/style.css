@@ -24,7 +24,11 @@ body {
 }
 
 .screen { min-height: 100vh; }
-.screen[hidden] { display: none; }
+/* !important di sini sengaja dipakai supaya aturan "sembunyikan" ini
+   SELALU menang, walau ada aturan lain (mis. #screen-login di bawah)
+   yang secara teknis lebih spesifik karena pakai ID. Tanpa ini, layar
+   login bisa tetap terlihat menumpuk di atas aplikasi setelah login. */
+.screen[hidden] { display: none !important; }
 
 /* ---------- LOGIN ---------- */
 /* min-height pakai svh (small viewport height) dulu supaya pas di layar

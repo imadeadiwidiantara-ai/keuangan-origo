@@ -186,7 +186,13 @@ async function submitTransaksi(e) {
   document.getElementById("f-terapis").value = "";
   document.getElementById("f-harga").value = "";
   buktiPanelOpen[data.id] = true; // langsung buka panel bukti setelah tersimpan
-  await renderBillingTab();
+
+  if (metode === "cash") {
+    await renderBillingTab(); // refresh dulu supaya transaksi baru ini "dikenal" sebelum dicetak
+    await cetakStrukTransaksiBluetooth(data.id);
+  } else {
+    await renderBillingTab();
+  }
 }
 
 async function ajukanHapusTransaksi(txId) {

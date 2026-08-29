@@ -67,16 +67,39 @@ function cetakStruk(t) {
 const BT_SERVICE_UUID = "000018f0-0000-1000-8000-00805f9b34fb";
 const BT_CHARACTERISTIC_UUID = "00002af1-0000-1000-8000-00805f9b34fb";
 
+// Menyimpan ID printer yang sudah pernah dipilih (per cabang) di localStorage,
+// supaya transaksi cash berikutnya tidak perlu buka dialog pilih perangkat
+// lagi — cukup sekali di transaksi pertama. Kalau printer beda cabang beda
+// unit, tiap cabang menyimpan ID printer-nya sendiri-sendiri.
+async function dapatkanPerangkatBluetooth(cabangId) {
+  const storageKey = "btPrinterId_" + cabangId;
+  const savedId = localStorage.getItem(storageKey);
+
+  if (savedId && navigator.bluetooth.getDevices) {
+    try {
+      const knownDevices = await navigator.bluetooth.getDevices();
+      const match = knownDevices.find((d) => d.id === savedId);
+      if (match) return match; // sudah pernah diizinkan, langsung pakai tanpa dialog lagi
+    } catch (e) { /* lanjut ke requestDevice biasa di bawah */ }
+  }
+
+  const device = await navigator.bluetooth.requestDevice({
+    filters: [{ services: [BT_SERVICE_UUID] }],
+    optionalServices: [BT_SERVICE_UUID],
+  });
+  localStorage.setItem(storageKey, device.id);
+  return device;
+}
+
 async function cetakStrukBluetooth(t) {
   if (!navigator.bluetooth) {
     alert("Browser ini tidak mendukung Web Bluetooth. Gunakan Chrome/Edge di Android atau desktop (tidak didukung di iPhone/Safari).");
     return false;
   }
   try {
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [BT_SERVICE_UUID] }],
-      optionalServices: [BT_SERVICE_UUID],
-    });
+    const device = await dapatkanPerangkatBluetooth(t.cabang_id);
+    if (!device) return false; // dibatalkan pengguna saat memilih perangkat
+
     const server = await device.gatt.connect();
     const service = await server.getPrimaryService(BT_SERVICE_UUID);
     const characteristic = await service.getCharacteristic(BT_CHARACTERISTIC_UUID);
