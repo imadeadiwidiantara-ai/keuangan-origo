@@ -12,8 +12,8 @@
 // oleh key ini.
 // ============================================================
 
-const SUPABASE_URL = "https://GANTI-DENGAN-PROJECT-ANDA.supabase.co";
-const SUPABASE_ANON_KEY = "GANTI-DENGAN-ANON-KEY-ANDA";
+const SUPABASE_URL = "https://axnsdczqnzrqvptsjehb.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4bnNkY3pxbnpycXZwdHNqZWhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MjI4NjksImV4cCI6MjEwMzQ5ODg2OX0.naK3viTLLQ9QI1RdcJAUUHy1FHWpaoMkjRf4-IgfGOc";
 
 if (typeof window.supabase === "undefined") {
   console.error("Supabase JS gagal dimuat. Cek koneksi internet / CDN.");
