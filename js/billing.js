@@ -237,20 +237,28 @@ async function kirimEmailInvoice(txId) {
   if (error) { alert("Gagal menyimpan: " + error.message); return; }
 
   // Coba kirim sungguhan lewat Edge Function "send-invoice-email".
-  // Kalau function itu belum di-deploy di project Anda (lihat
-  // supabase/functions/send-invoice-email/index.ts), panggilan ini akan
-  // gagal dengan wajar — alamat emailnya tetap tersimpan seperti sebelumnya.
   try {
     const { error: fnError } = await supabaseClient.functions.invoke("send-invoice-email", {
       body: { transaksi_id: txId },
     });
     if (fnError) {
-      alert("Alamat email tersimpan, tapi pengiriman otomatis belum aktif (Edge Function belum di-deploy). Lihat README.md bagian \"Langkah lanjutan\".");
+      console.error("Edge Function error:", fnError);
+      let detail = fnError.message || "penyebab tidak diketahui";
+      // Function ini biasanya mengirim pesan error yang lebih jelas di body respons —
+      // coba baca itu supaya pesan ke pengguna lebih berguna daripada teks generik.
+      try {
+        if (fnError.context && typeof fnError.context.json === "function") {
+          const body = await fnError.context.json();
+          if (body && body.error) detail = body.error;
+        }
+      } catch (_) { /* biarkan pakai fnError.message di atas */ }
+      alert("Gagal mengirim invoice: " + detail);
     } else {
       alert("Invoice terkirim ke " + email + ".");
     }
   } catch (e) {
-    alert("Alamat email tersimpan, tapi pengiriman otomatis belum aktif. Lihat README.md bagian \"Langkah lanjutan\".");
+    console.error(e);
+    alert("Gagal mengirim invoice: " + e.message);
   }
 
   await renderBillingTab();
