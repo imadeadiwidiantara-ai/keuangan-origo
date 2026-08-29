@@ -49,3 +49,69 @@ function cetakStruk(t) {
   window.print();
   printArea.hidden = true;
 }
+
+// ============================================================
+// CETAK BLUETOOTH LANGSUNG (EKSPERIMENTAL)
+// Mencoba mengirim struk langsung ke printer thermal Bluetooth
+// (protokol ESC/POS) tanpa dialog print, memakai Web Bluetooth API.
+//
+// PERINGATAN JUJUR: UUID service/characteristic di bawah ini adalah
+// yang PALING UMUM dipakai printer thermal BLE murah generik — tapi
+// tiap merek/tipe printer bisa beda. Kalau gagal atau hasil cetaknya
+// kacau, itu bukan berarti aplikasinya rusak — coba dulu tombol
+// "Cetak struk" biasa (dialog print) yang sudah pasti berfungsi di
+// printer apa pun yang bisa diset sebagai default printer Windows/Mac.
+// Kabari kalau ingin disesuaikan ke merek printer spesifik Anda.
+// ============================================================
+
+const BT_SERVICE_UUID = "000018f0-0000-1000-8000-00805f9b34fb";
+const BT_CHARACTERISTIC_UUID = "00002af1-0000-1000-8000-00805f9b34fb";
+
+async function cetakStrukBluetooth(t) {
+  if (!navigator.bluetooth) {
+    alert("Browser ini tidak mendukung Web Bluetooth. Gunakan Chrome/Edge di Android atau desktop (tidak didukung di iPhone/Safari).");
+    return false;
+  }
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [BT_SERVICE_UUID] }],
+      optionalServices: [BT_SERVICE_UUID],
+    });
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(BT_SERVICE_UUID);
+    const characteristic = await service.getCharacteristic(BT_CHARACTERISTIC_UUID);
+
+    const cabang = cabangById(t.cabang_id) || { nama: "Klinik" };
+    const pengaturan = AppState.pengaturanCabang && AppState.pengaturanCabang[t.cabang_id];
+    const footer = (pengaturan && pengaturan.pesan_penutup_struk) || "Terima kasih atas kepercayaan Anda";
+
+    const lines = [
+      cabang.nama,
+      "No: #" + t.index_global,
+      t.tanggal,
+      "Klien: " + t.nama_klien,
+      "Terapis: " + t.terapis,
+      "Metode: " + t.metode.toUpperCase(),
+      "TOTAL: " + formatRupiah(t.harga),
+      "",
+      footer,
+      "", "", "",
+    ].join("\n");
+
+    const encoder = new TextEncoder();
+    const ESC_INIT = new Uint8Array([0x1b, 0x40]); // reset printer
+    const payload = new Uint8Array([...ESC_INIT, ...encoder.encode(lines)]);
+
+    // Kirim per-potong kecil (20 byte) — banyak printer BLE murah tidak
+    // menerima data dalam satu kiriman besar sekaligus.
+    const CHUNK = 20;
+    for (let i = 0; i < payload.length; i += CHUNK) {
+      await characteristic.writeValue(payload.slice(i, i + CHUNK));
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    return true;
+  } catch (err) {
+    alert("Cetak Bluetooth gagal (" + err.message + "). Coba tombol \"Cetak struk\" biasa sebagai gantinya.");
+    return false;
+  }
+}

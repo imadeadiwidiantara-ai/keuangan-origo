@@ -20,11 +20,11 @@ function setActiveTab(tabName) {
   refreshActiveTab();
 }
 
-function refreshActiveTab() {
-  if (AppState.activeTab === "billing") renderBillingTab();
-  else if (AppState.activeTab === "kas") renderKasTab();
-  else if (AppState.activeTab === "pengawasan") renderPengawasanTab();
-  else if (AppState.activeTab === "pengaturan") renderPengaturanTab();
+async function refreshActiveTab() {
+  if (AppState.activeTab === "billing") await renderBillingTab();
+  else if (AppState.activeTab === "kas") await renderKasTab();
+  else if (AppState.activeTab === "pengawasan") await renderPengawasanTab();
+  else if (AppState.activeTab === "pengaturan") await renderPengaturanTab();
 }
 
 function renderHeaderInfo() {
@@ -59,12 +59,27 @@ function renderDateBar() {
   });
 }
 
-function shiftDate(days) {
+async function shiftDate(days) {
   const dt = new Date(AppState.selectedDate + "T00:00:00");
   dt.setDate(dt.getDate() + days);
   AppState.selectedDate = dt.toISOString().slice(0, 10);
   renderDateBar();
-  refreshActiveTab();
+
+  // Kunci tombol panah sementara + tampilkan status "Memuat..." supaya
+  // jelas kalau sistem sedang menunggu jawaban dari server (bukan macet).
+  const prevBtn = document.getElementById("btn-prev-day");
+  const nextBtn = document.getElementById("btn-next-day");
+  const label = document.getElementById("date-label");
+  const originalLabel = label.textContent;
+  prevBtn.disabled = true;
+  nextBtn.disabled = true;
+  label.textContent = originalLabel + " · memuat…";
+
+  await refreshActiveTab();
+
+  prevBtn.disabled = false;
+  nextBtn.disabled = false;
+  renderDateBar();
 }
 
 function escapeHtml(str) {

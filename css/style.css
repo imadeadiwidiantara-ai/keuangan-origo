@@ -27,26 +27,31 @@ body {
 .screen[hidden] { display: none; }
 
 /* ---------- LOGIN ---------- */
+/* min-height pakai svh (small viewport height) dulu supaya pas di layar
+   HP/laptop pendek tanpa perlu scroll; vh dipertahankan sebagai fallback
+   untuk browser lama yang belum kenal satuan svh. */
 #screen-login {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 16px;
+  min-height: 100vh;
+  min-height: 100svh;
 }
 .login-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 32px;
+  padding: 24px;
   width: 100%;
   max-width: 360px;
   text-align: center;
 }
-.login-logo { width: 64px; height: 64px; margin-bottom: 12px; }
-.login-card h1 { margin: 0 0 4px; font-size: 20px; }
-.login-card label { display: block; text-align: left; font-size: 13px; color: var(--text-muted); margin: 12px 0 4px; }
+.login-logo { width: 48px; height: 48px; margin-bottom: 8px; }
+.login-card h1 { margin: 0 0 4px; font-size: 18px; }
+.login-card label { display: block; text-align: left; font-size: 13px; color: var(--text-muted); margin: 8px 0 4px; }
 .muted { color: var(--text-muted); font-size: 14px; }
-.muted.small { font-size: 12px; margin-top: 16px; }
+.muted.small { font-size: 12px; margin-top: 12px; }
 
 /* ---------- INPUTS ---------- */
 input, select, textarea, button {
@@ -140,6 +145,37 @@ button { cursor: pointer; }
 #cabang-select { flex: 1; }
 #date-bar { justify-content: center; gap: 16px; }
 #date-label { font-size: 14px; font-weight: 500; min-width: 200px; text-align: center; }
+#date-bar .btn-ghost {
+  color: var(--blue);
+  border-color: var(--blue-light);
+  background: var(--blue-light);
+  font-size: 18px;
+  font-weight: 700;
+  width: 34px;
+  height: 34px;
+  line-height: 1;
+  padding: 0;
+  border-radius: 50%;
+}
+#date-bar .btn-ghost:hover { background: var(--blue); color: #fff; }
+#date-bar .btn-ghost:disabled { opacity: 0.5; cursor: default; background: var(--surface-alt); color: var(--text-muted); }
+
+/* ---------- NOTIFIKASI / BANNER ---------- */
+.banner-warning {
+  background: var(--amber-light);
+  color: var(--amber);
+  border: 1px solid #f0dbb0;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* ---------- GRAFIK BATANG SEDERHANA ---------- */
+.bar-row { margin: 8px 0; }
+.bar-row .bar-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
+.bar-track { background: var(--surface-alt); border-radius: 4px; height: 8px; }
+.bar-fill { height: 8px; border-radius: 4px; }
 
 /* ---------- CARDS ---------- */
 .card {

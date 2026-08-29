@@ -7,6 +7,36 @@
 
 let billingCache = []; // transaksi hasil query terakhir, dipakai ulang saat re-render kecil (mis. buka panel bukti)
 const buktiPanelOpen = {}; // { [transaksi.id]: boolean }
+let autocompleteCabangId = null; // cabang terakhir yang datalist-nya sudah dimuat, hindari query berulang
+
+// ---------- Autocomplete nama klien & terapis (berdasarkan riwayat) ----------
+async function loadAutocompleteLists() {
+  if (AppState.selectedCabangId === autocompleteCabangId) return; // sudah dimuat untuk cabang ini
+  let query = supabaseClient
+    .from("transaksi")
+    .select("nama_klien, terapis")
+    .eq("dihapus", false)
+    .order("index_global", { ascending: false })
+    .limit(300);
+  if (AppState.selectedCabangId !== "semua") query = query.eq("cabang_id", AppState.selectedCabangId);
+
+  const { data, error } = await query;
+  if (error) return;
+
+  const namaSet = new Set();
+  const terapisSet = new Set();
+  (data || []).forEach((r) => {
+    if (r.nama_klien) namaSet.add(r.nama_klien);
+    if (r.terapis) terapisSet.add(r.terapis);
+  });
+
+  document.getElementById("datalist-klien").innerHTML =
+    [...namaSet].map((n) => `<option value="${escapeHtml(n)}">`).join("");
+  document.getElementById("datalist-terapis").innerHTML =
+    [...terapisSet].map((n) => `<option value="${escapeHtml(n)}">`).join("");
+
+  autocompleteCabangId = AppState.selectedCabangId;
+}
 
 async function loadTransaksi() {
   let query = supabaseClient
@@ -32,10 +62,12 @@ async function loadTransaksi() {
 async function renderBillingTab() {
   const form = document.getElementById("form-transaksi");
   form.hidden = !isKasir();
+  if (isKasir()) loadAutocompleteLists(); // tidak perlu ditunggu (await), boleh jalan di belakang
 
   billingCache = await loadTransaksi();
   renderTxList();
   renderTxSummary();
+  renderTutupKasCard();
 }
 
 function renderTxList() {
@@ -90,7 +122,10 @@ function renderBuktiArea(t) {
     return `<button class="btn-ghost small" data-action="toggle-bukti" data-id="${t.id}" style="margin-top:6px;">Kirim bukti</button>${sudahKirim}`;
   }
   return `<div style="margin-top:8px; background:var(--surface-alt); border-radius:8px; padding:10px;">
-    <button class="btn-ghost small" data-action="cetak-struk" data-id="${t.id}">Cetak struk</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn-ghost small" data-action="cetak-struk" data-id="${t.id}">Cetak struk</button>
+      <button class="btn-ghost small" data-action="cetak-struk-bt" data-id="${t.id}" title="Eksperimental — lihat catatan di js/receipt.js">Cetak Bluetooth (eksperimental)</button>
+    </div>
     <div style="display:flex; gap:8px; margin-top:8px;">
       <input type="email" id="email-input-${t.id}" placeholder="Email orang tua" style="flex:1;" />
       <button class="btn-ghost small" data-action="kirim-email" data-id="${t.id}">Kirim invoice</button>
@@ -170,8 +205,18 @@ async function cetakStrukTransaksi(txId) {
   const t = billingCache.find((x) => x.id === txId);
   if (!t) return;
   await supabaseClient.from("transaksi").update({ struk_dicetak: true }).eq("id", txId);
-  cetakStruk(t); // fungsi dari receipt.js — membuka window print
+  cetakStruk(t); // fungsi dari receipt.js — membuka dialog print browser
   await renderBillingTab();
+}
+
+async function cetakStrukTransaksiBluetooth(txId) {
+  const t = billingCache.find((x) => x.id === txId);
+  if (!t) return;
+  const berhasil = await cetakStrukBluetooth(t); // fungsi dari receipt.js
+  if (berhasil) {
+    await supabaseClient.from("transaksi").update({ struk_dicetak: true }).eq("id", txId);
+    await renderBillingTab();
+  }
 }
 
 async function kirimEmailInvoice(txId) {
@@ -181,14 +226,127 @@ async function kirimEmailInvoice(txId) {
     alert("Isi email yang valid dulu.");
     return;
   }
-  // CATATAN: pengiriman email sungguhan butuh Supabase Edge Function +
-  // penyedia email (mis. Resend) — lihat README.md bagian "Langkah lanjutan".
-  // Baris ini baru menyimpan alamat tujuan sebagai bukti niat kirim.
+
   const { error } = await supabaseClient.from("transaksi").update({ invoice_email: email }).eq("id", txId);
   if (error) { alert("Gagal menyimpan: " + error.message); return; }
-  alert("Alamat email tersimpan. Pengiriman otomatis perlu Edge Function tambahan (lihat README.md).");
+
+  // Coba kirim sungguhan lewat Edge Function "send-invoice-email".
+  // Kalau function itu belum di-deploy di project Anda (lihat
+  // supabase/functions/send-invoice-email/index.ts), panggilan ini akan
+  // gagal dengan wajar — alamat emailnya tetap tersimpan seperti sebelumnya.
+  try {
+    const { error: fnError } = await supabaseClient.functions.invoke("send-invoice-email", {
+      body: { transaksi_id: txId },
+    });
+    if (fnError) {
+      alert("Alamat email tersimpan, tapi pengiriman otomatis belum aktif (Edge Function belum di-deploy). Lihat README.md bagian \"Langkah lanjutan\".");
+    } else {
+      alert("Invoice terkirim ke " + email + ".");
+    }
+  } catch (e) {
+    alert("Alamat email tersimpan, tapi pengiriman otomatis belum aktif. Lihat README.md bagian \"Langkah lanjutan\".");
+  }
+
   await renderBillingTab();
 }
+
+// ---------- Tutup kas harian (rincian pecahan uang + nama penghitung) ----------
+const PECAHAN = [100000, 50000, 20000, 10000, 5000, 2000, 1000];
+const pecahanCount = {};
+PECAHAN.forEach((p) => { pecahanCount[p] = 0; });
+
+async function renderTutupKasCard() {
+  const card = document.getElementById("tutup-kas-card");
+  card.hidden = !isKasir();
+  if (!isKasir()) return;
+
+  const inputsBox = document.getElementById("pecahan-inputs");
+  inputsBox.innerHTML = PECAHAN.map((p) => `
+    <div>
+      <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">${formatRupiah(p)} × lembar</label>
+      <input type="number" min="0" data-pecahan="${p}" value="${pecahanCount[p]}" />
+    </div>`).join("");
+
+  inputsBox.querySelectorAll("input[data-pecahan]").forEach((inp) => {
+    inp.addEventListener("input", function () {
+      pecahanCount[Number(this.dataset.pecahan)] = parseInt(this.value, 10) || 0;
+      updateTutupKasHasil();
+    });
+  });
+
+  updateTutupKasHasil();
+  await renderRiwayatTutupKas();
+}
+
+function totalCashSistemHariIni() {
+  return billingCache.filter((t) => !t.dihapus && t.metode === "cash").reduce((a, t) => a + Number(t.harga), 0);
+}
+
+function updateTutupKasHasil() {
+  const totalHitung = PECAHAN.reduce((a, p) => a + p * pecahanCount[p], 0);
+  document.getElementById("pecahan-total").textContent = "Total dihitung: " + formatRupiah(totalHitung);
+
+  const totalSistem = totalCashSistemHariIni();
+  const selisih = totalHitung - totalSistem;
+  const hasilBox = document.getElementById("tutup-kas-hasil");
+  if (totalHitung === 0) {
+    hasilBox.innerHTML = `<span class="muted">Isi jumlah lembar tiap pecahan di atas.</span>`;
+  } else if (selisih === 0) {
+    hasilBox.innerHTML = `<span class="badge-ok">Sesuai — cash cocok dengan sistem (${formatRupiah(totalSistem)}).</span>`;
+  } else if (selisih < 0) {
+    hasilBox.innerHTML = `<span class="badge-warn">Kekurangan ${formatRupiah(Math.abs(selisih))} dari total sistem (${formatRupiah(totalSistem)}).</span>`;
+  } else {
+    hasilBox.innerHTML = `<span class="badge-warn">Kelebihan ${formatRupiah(selisih)} dari total sistem (${formatRupiah(totalSistem)}).</span>`;
+  }
+}
+
+async function simpanTutupKas() {
+  const totalHitung = PECAHAN.reduce((a, p) => a + p * pecahanCount[p], 0);
+  const dihitungOleh = document.getElementById("tutup-dihitung-oleh").value.trim();
+  if (!(totalHitung > 0) || !dihitungOleh) {
+    alert("Isi rincian pecahan uang dan nama yang menghitung dulu.");
+    return;
+  }
+  const totalSistem = totalCashSistemHariIni();
+  const cabangId = AppState.selectedCabangId === "semua" ? AppState.profile.cabang_id : AppState.selectedCabangId;
+
+  const { error } = await supabaseClient.from("penutupan_kas_harian").insert({
+    cabang_id: cabangId,
+    tanggal: AppState.selectedDate,
+    total_dihitung: totalHitung,
+    total_sistem: totalSistem,
+    selisih: totalHitung - totalSistem,
+    dihitung_oleh: dihitungOleh,
+    dicatat_oleh: AppState.profile.id,
+  });
+  if (error) { alert("Gagal menyimpan: " + error.message); return; }
+
+  PECAHAN.forEach((p) => { pecahanCount[p] = 0; });
+  document.getElementById("tutup-dihitung-oleh").value = "";
+  await renderTutupKasCard();
+}
+
+async function renderRiwayatTutupKas() {
+  const cabangId = AppState.selectedCabangId === "semua" ? AppState.profile.cabang_id : AppState.selectedCabangId;
+  const { data } = await supabaseClient
+    .from("penutupan_kas_harian")
+    .select("*")
+    .eq("cabang_id", cabangId)
+    .eq("tanggal", AppState.selectedDate)
+    .order("dibuat_pada", { ascending: false });
+
+  const box = document.getElementById("tutup-kas-riwayat");
+  if (!data || data.length === 0) { box.innerHTML = ""; return; }
+
+  box.innerHTML = `<p style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Riwayat penutupan kas tanggal ini:</p>` +
+    data.map((r) => {
+      const statusClass = Number(r.selisih) === 0 ? "badge-ok" : "badge-warn";
+      const statusText = Number(r.selisih) === 0 ? "sesuai" : (r.selisih < 0 ? "kurang " + formatRupiah(Math.abs(r.selisih)) : "lebih " + formatRupiah(r.selisih));
+      return `<div class="row-meta">${formatRupiah(r.total_dihitung)} oleh ${escapeHtml(r.dihitung_oleh)} — <span class="${statusClass}">${statusText}</span></div>`;
+    }).join("");
+}
+
+document.getElementById("btn-simpan-tutup-kas").addEventListener("click", simpanTutupKas);
 
 // ---------- Event delegation untuk daftar transaksi ----------
 document.addEventListener("click", (e) => {
@@ -200,5 +358,6 @@ document.addEventListener("click", (e) => {
   if (action === "ajukan-hapus-tx") ajukanHapusTransaksi(id);
   if (action === "toggle-bukti") { buktiPanelOpen[id] = !buktiPanelOpen[id]; renderTxList(); }
   if (action === "cetak-struk") cetakStrukTransaksi(id);
+  if (action === "cetak-struk-bt") cetakStrukTransaksiBluetooth(id);
   if (action === "kirim-email") kirimEmailInvoice(id);
 });

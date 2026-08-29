@@ -37,7 +37,8 @@ create table profiles (
 create table pengaturan_cabang (
   cabang_id uuid primary key references cabang(id) on delete cascade,
   ukuran_kertas_struk text not null default '58',
-  pesan_penutup_struk text not null default 'Terima kasih atas kepercayaan Anda'
+  pesan_penutup_struk text not null default 'Terima kasih atas kepercayaan Anda',
+  batas_saldo_minimum numeric(12,2) not null default 300000
 );
 
 -- ---------- MASTER DATA ----------
@@ -117,6 +118,45 @@ create table permintaan_hapus_kas (
   disetujui_oleh uuid references profiles(id),
   waktu_keputusan timestamptz
 );
+
+-- ---------- PENUTUPAN KAS HARIAN (pencocokan kas fisik billing) ----------
+-- Catatan hasil hitung fisik uang cash di akhir shift/hari, dibandingkan
+-- dengan total cash billing yang tercatat sistem. "dihitung_oleh" disimpan
+-- sebagai teks bebas (nama orang yang menghitung saat itu), bukan terikat
+-- akun login, karena satu akun kasir dipakai bergantian oleh beberapa orang.
+create table penutupan_kas_harian (
+  id uuid primary key default gen_random_uuid(),
+  cabang_id uuid not null references cabang(id),
+  tanggal date not null default current_date,
+  total_dihitung numeric(12,2) not null,
+  total_sistem numeric(12,2) not null,
+  selisih numeric(12,2) not null,
+  dihitung_oleh text not null,
+  catatan text,
+  dicatat_oleh uuid references profiles(id),
+  dibuat_pada timestamptz not null default now()
+);
+
+alter table penutupan_kas_harian enable row level security;
+
+create policy "penutupan_kas_select_kasir" on penutupan_kas_harian for select
+  using (
+    (select role from current_profile()) = 'kasir'
+    and cabang_id = (select cabang_id from current_profile())
+  );
+create policy "penutupan_kas_insert_kasir" on penutupan_kas_harian for insert
+  with check (
+    (select role from current_profile()) = 'kasir'
+    and cabang_id = (select cabang_id from current_profile())
+  );
+create policy "penutupan_kas_select_keuangan" on penutupan_kas_harian for select
+  using ((select role from current_profile()) = 'keuangan');
+create policy "penutupan_kas_select_pengawas" on penutupan_kas_harian for select
+  using ((select role from current_profile()) = 'pengawas');
+create policy "penutupan_kas_insert_pengawas" on penutupan_kas_harian for insert
+  with check ((select role from current_profile()) = 'pengawas');
+-- Sengaja tidak ada policy update/delete — catatan penutupan kas bersifat
+-- permanen begitu disimpan, seperti nota tutup kasir fisik.
 
 -- ---------- LOG AUDIT (write-only, tidak ada policy update/delete sama sekali) ----------
 create table log_audit (

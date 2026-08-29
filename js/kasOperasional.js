@@ -40,8 +40,24 @@ async function renderKasTab() {
     .sort((a, b) => a.index_global - b.index_global);
 
   renderKasSaldoCard();
+  renderKasNotifikasi();
   renderKasForm();
   renderKasList();
+}
+
+function renderKasNotifikasi() {
+  const box = document.getElementById("kas-saldo-notif");
+  if (AppState.selectedCabangId === "semua" || !AppState.pengaturanCabang) { box.innerHTML = ""; return; }
+
+  const pengaturan = AppState.pengaturanCabang[AppState.selectedCabangId];
+  const batas = (pengaturan && pengaturan.batas_saldo_minimum) || 300000;
+  const saldo = kasSaldoPerCabang[AppState.selectedCabangId] || 0;
+
+  if (saldo < batas) {
+    box.innerHTML = `<div class="banner-warning">⚠ Saldo kas operasional mulai menipis: ${formatRupiah(saldo)} (batas notifikasi ${formatRupiah(batas)}). Segera ajukan top-up ke Pengawas.</div>`;
+  } else {
+    box.innerHTML = "";
+  }
 }
 
 function renderKasSaldoCard() {

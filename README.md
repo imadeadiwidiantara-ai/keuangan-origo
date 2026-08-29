@@ -30,6 +30,8 @@ Dokumen ini panduan setup dari nol sampai bisa dipakai di komputer cabang.
 2. Buka file `sql/schema.sql` di folder ini, salin semua isinya, tempel di SQL Editor, lalu **Run**.
 3. Ini otomatis membuat semua tabel, aturan akses (Row Level Security), dan 2 cabang contoh ("Batubulan", "Siulan" — silakan ganti/hapus sesuai kebutuhan lewat tab Pengaturan di aplikasi nanti).
 
+> **Kalau project Supabase Anda sudah pernah dibuat sebelumnya** (bukan baru), jangan jalankan `schema.sql` lagi — cukup jalankan `sql/migration_2.sql` untuk menambahkan fitur "Tutup kas harian" dan "Notifikasi saldo kas menipis" tanpa mengubah data yang sudah ada.
+
 ## 3. Buat akun peran
 
 Aplikasi ini **tidak** memakai login per orang — cukup 1 akun per peran (sesuai kesepakatan kita karena satu komputer dipakai bersama):
@@ -90,15 +92,14 @@ Setelah web-nya online (langkah 6):
 - **Cetak struk** memakai dialog print browser biasa (bukan protokol Bluetooth ESC/POS langsung) — lihat catatan di `js/receipt.js` untuk alasannya dan opsi lanjutannya.
 - **Kirim invoice via email** saat ini baru menyimpan alamat tujuan ke database, belum benar-benar mengirim email — pengiriman otomatis butuh Supabase Edge Function + penyedia email (misalnya Resend), lihat bagian 9.
 
-## 9. Langkah lanjutan yang belum termasuk di versi ini
+## 9. Status fitur
 
-Ini bukan kekurangan yang disembunyikan — sengaja belum dikerjakan supaya rilis pertama ini bisa segera dicoba dan dievaluasi:
+Sudah ada di versi ini:
+- ✅ Saran nama otomatis (autocomplete) untuk kolom terapis/klien, berdasarkan riwayat transaksi cabang yang sama.
+- ✅ Tutup kas harian: rincian pecahan uang (100rb–1rb), otomatis dibandingkan dengan total cash sistem, dan mencatat nama yang menghitung — ada di tab Billing, khusus mode Kasir.
+- ✅ Grafik metode pembayaran (cash/transfer/QRIS) — Pengaturan > Grafik metode pembayaran.
+- ✅ Notifikasi saldo kas operasional menipis — banner otomatis muncul di tab Kas Operasional kalau saldo di bawah batas yang diatur Pengawas di Pengaturan > Notifikasi saldo kas.
+- ✅ Pengiriman email invoice — kerangka Edge Function sudah dibuat (`supabase/functions/send-invoice-email/`), tapi **butuh Anda deploy sendiri** (perlu akun Resend + Supabase CLI). Instruksi lengkap ada di komentar bagian atas file `index.ts`-nya. Sebelum di-deploy, tombol "Kirim invoice" tetap menyimpan alamat email dengan aman, hanya belum benar-benar mengirim.
 
-- Pengiriman email invoice otomatis (perlu Supabase Edge Function).
-- Cetak struk langsung ke printer Bluetooth tanpa dialog print (perlu pengujian dengan unit printer sungguhan).
-- Saran nama otomatis (autocomplete) untuk kolom terapis/klien berdasarkan riwayat.
-- Rincian pecahan uang kas (breakdown per lembar 100rb/50rb/dst) untuk pencocokan kas fisik.
-- Grafik metode pembayaran di tab Pengaturan.
-- Notifikasi otomatis kalau saldo kas operasional mulai menipis.
-
-Silakan minta salah satu dari daftar ini kapan pun siap untuk dikerjakan lebih lanjut.
+Masih eksperimental (dipakai dengan hati-hati):
+- ⚠ Cetak struk langsung ke printer Bluetooth (tombol "Cetak Bluetooth (eksperimental)") — memakai UUID service/characteristic yang paling umum dipakai printer thermal BLE murah, tapi **belum diuji ke unit printer sungguhan**. Kalau gagal atau hasil cetak kacau, gunakan tombol "Cetak struk" biasa (dialog print) yang sudah pasti berfungsi, dan kabari merek/tipe printer Anda supaya bisa disesuaikan.

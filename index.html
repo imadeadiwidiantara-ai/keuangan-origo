@@ -78,8 +78,10 @@
       <form id="form-transaksi" class="card" hidden>
         <h2>Transaksi baru</h2>
         <div class="form-grid">
-          <input type="text" id="f-nama" placeholder="Nama klien" required />
-          <input type="text" id="f-terapis" placeholder="Nama terapis" required />
+          <input type="text" id="f-nama" placeholder="Nama klien" list="datalist-klien" required />
+          <input type="text" id="f-terapis" placeholder="Nama terapis" list="datalist-terapis" required />
+          <datalist id="datalist-klien"></datalist>
+          <datalist id="datalist-terapis"></datalist>
           <input type="text" id="f-harga" inputmode="numeric" placeholder="Harga (Rp)" required />
           <select id="f-metode">
             <option value="cash">Cash</option>
@@ -98,10 +100,21 @@
 
       <div id="tx-list" class="card"></div>
       <div id="tx-summary" class="summary-grid"></div>
+
+      <div id="tutup-kas-card" class="card" hidden>
+        <h2>Tutup kas harian (cocokkan uang fisik)</h2>
+        <div class="form-grid" id="pecahan-inputs"></div>
+        <div id="pecahan-total" class="row-meta" style="margin-bottom:8px;"></div>
+        <input type="text" id="tutup-dihitung-oleh" placeholder="Nama yang menghitung" style="margin-bottom:10px;" />
+        <div id="tutup-kas-hasil" style="margin-bottom:10px; font-weight:500;"></div>
+        <button id="btn-simpan-tutup-kas" class="btn-primary" style="width:auto; padding:8px 16px;">Simpan penutupan kas</button>
+        <div id="tutup-kas-riwayat" style="margin-top:16px;"></div>
+      </div>
     </section>
 
     <!-- ---------- TAB: KAS OPERASIONAL ---------- -->
     <section id="tab-kas" class="tab-panel" hidden>
+      <div id="kas-saldo-notif"></div>
       <div id="kas-saldo" class="card"></div>
 
       <form id="form-kas" class="card" hidden>

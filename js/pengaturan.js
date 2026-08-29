@@ -5,6 +5,7 @@
 let openSettingsSection = "";
 let masterTerapisCache = [];
 let masterLayananCache = [];
+let grafikTxCache = [];
 
 async function loadPengaturanCabang() {
   const { data } = await supabaseClient.from("pengaturan_cabang").select("*");
@@ -27,6 +28,11 @@ async function renderPengaturanTab() {
   masterTerapisCache = terapisData || [];
   masterLayananCache = layananData || [];
 
+  const { data: txHariIni } = await supabaseClient
+    .from("transaksi").select("metode, harga")
+    .eq("cabang_id", cabangId).eq("tanggal", AppState.selectedDate).eq("dihapus", false);
+  grafikTxCache = txHariIni || [];
+
   renderSettingsSections(cabangId);
 }
 
@@ -37,8 +43,10 @@ function renderSettingsSections(cabangId) {
   const sections = [
     { key: "lokasi", title: "Info lokasi", editable: isPengawas() },
     { key: "master", title: "Master data", editable: isPengawas() },
+    { key: "grafik", title: "Grafik metode pembayaran", editable: true },
     { key: "keamanan", title: "Keamanan", editable: true },
     { key: "struk", title: "Preferensi struk", editable: isPengawas() },
+    { key: "notifikasi", title: "Notifikasi saldo kas", editable: isPengawas() },
     { key: "backup", title: "Data dan backup", editable: true },
   ];
 
@@ -55,6 +63,25 @@ function renderSettingsSections(cabangId) {
         ` : `<p class="muted">Hanya pengawas yang bisa mengubah info lokasi.</p>`;
       } else if (s.key === "master") {
         body = renderMasterDataSection();
+      } else if (s.key === "grafik") {
+        const totalBy = (m) => grafikTxCache.filter((t) => t.metode === m).reduce((a, t) => a + Number(t.harga), 0);
+        const cash = totalBy("cash"), transfer = totalBy("transfer"), qris = totalBy("qris");
+        const maxV = Math.max(cash, transfer, qris, 1);
+        const bar = (label, val, color) => {
+          const pct = Math.round((val / maxV) * 100);
+          return `<div class="bar-row">
+            <div class="bar-label"><span>${label}</span><span>${formatRupiah(val)}</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${color};"></div></div>
+          </div>`;
+        };
+        body = `<p class="muted" style="margin:8px 0;">Tanggal ${AppState.selectedDate}</p>` +
+          bar("Cash", cash, "var(--blue)") + bar("Transfer", transfer, "#2f8a4e") + bar("QRIS", qris, "var(--amber)");
+      } else if (s.key === "notifikasi") {
+        body = isPengawas() ? `
+          <label>Beri tahu kalau saldo kas operasional di bawah:</label>
+          <input type="text" id="set-batas-saldo" inputmode="numeric" value="${Math.round(pengaturan.batas_saldo_minimum || 300000)}" />
+          <button class="btn-ghost small" data-set-action="simpan-notifikasi" style="margin-top:8px;">Simpan</button>
+        ` : `<p class="muted">Batas notifikasi saat ini: ${formatRupiah(pengaturan.batas_saldo_minimum || 300000)}. Hanya pengawas yang bisa mengubah.</p>`;
       } else if (s.key === "keamanan") {
         body = `<p class="muted">PIN app-level sudah digantikan login akun Supabase Auth. Untuk mengganti kata sandi akun, gunakan menu "Forgot password" di layar login, atau minta pengawas mengatur ulang lewat Supabase Dashboard.</p>`;
       } else if (s.key === "struk") {
@@ -133,6 +160,12 @@ document.addEventListener("click", async (e) => {
     await supabaseClient.from("pengaturan_cabang").upsert({
       cabang_id: cabangId, ukuran_kertas_struk: ukuran, pesan_penutup_struk: footer,
     });
+    await loadPengaturanCabang();
+    renderSettingsSections(cabangId);
+  }
+  if (action === "simpan-notifikasi") {
+    const batas = parseFloat(document.getElementById("set-batas-saldo").value.replace(/\D/g, "")) || 0;
+    await supabaseClient.from("pengaturan_cabang").upsert({ cabang_id: cabangId, batas_saldo_minimum: batas });
     await loadPengaturanCabang();
     renderSettingsSections(cabangId);
   }
