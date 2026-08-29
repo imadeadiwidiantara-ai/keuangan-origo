@@ -38,6 +38,8 @@ create table pengaturan_cabang (
   cabang_id uuid primary key references cabang(id) on delete cascade,
   ukuran_kertas_struk text not null default '58',
   pesan_penutup_struk text not null default 'Terima kasih atas kepercayaan Anda',
+  kop_tambahan text not null default $$ORIGO CHILDREN STIMULATION CENTER
+Telp/WhatsApp: 085-910-69999-31 | Instagram: @origo.id | Tiktok: @origocenter$$,
   batas_saldo_minimum numeric(12,2) not null default 300000
 );
 
@@ -155,6 +157,8 @@ create policy "penutupan_kas_select_pengawas" on penutupan_kas_harian for select
   using ((select role from current_profile()) = 'pengawas');
 create policy "penutupan_kas_insert_pengawas" on penutupan_kas_harian for insert
   with check ((select role from current_profile()) = 'pengawas');
+create policy "penutupan_kas_delete_pengawas" on penutupan_kas_harian for delete
+  using ((select role from current_profile()) = 'pengawas');
 -- Sengaja tidak ada policy update/delete — catatan penutupan kas bersifat
 -- permanen begitu disimpan, seperti nota tutup kasir fisik.
 

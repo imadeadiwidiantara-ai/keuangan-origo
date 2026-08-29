@@ -39,7 +39,7 @@ async function handleLogin(email, password) {
   await loadCabangList();
   await loadPengaturanCabang();
 
-  AppState.selectedCabangId = profile.role === "pengawas" ? "semua" : profile.cabang_id;
+  AppState.selectedCabangId = (profile.role === "pengawas" || profile.role === "keuangan") ? "semua" : profile.cabang_id;
 
   showScreen("app");
   renderHeaderInfo();
@@ -55,6 +55,7 @@ async function loadCabangList() {
 }
 
 async function handleLogout() {
+  if (!confirm("Yakin ingin keluar? Pastikan tidak ada transaksi yang sedang diketik.")) return;
   await supabaseClient.auth.signOut();
   AppState.session = null;
   AppState.profile = null;
@@ -74,7 +75,7 @@ async function restoreSessionIfAny() {
       AppState.profile = profile;
       await loadCabangList();
       await loadPengaturanCabang();
-      AppState.selectedCabangId = profile.role === "pengawas" ? "semua" : profile.cabang_id;
+      AppState.selectedCabangId = (profile.role === "pengawas" || profile.role === "keuangan") ? "semua" : profile.cabang_id;
       showScreen("app");
       renderHeaderInfo();
       renderCabangBar();

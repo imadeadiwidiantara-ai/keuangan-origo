@@ -19,6 +19,7 @@ function cetakStruk(t) {
   const pengaturan = AppState.pengaturanCabang && AppState.pengaturanCabang[t.cabang_id];
   const paperClass = pengaturan && pengaturan.ukuran_kertas_struk === "80" ? "paper-80" : "";
   const footer = (pengaturan && pengaturan.pesan_penutup_struk) || "Terima kasih atas kepercayaan Anda";
+  const kop = pengaturan && pengaturan.kop_tambahan;
   const jam = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
   const tanggal = new Date(t.tanggal + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 
@@ -26,7 +27,7 @@ function cetakStruk(t) {
     <div class="receipt ${paperClass}">
       <div class="center">${escapeHtml(cabang.nama)}</div>
       ${cabang.alamat ? `<div class="center" style="font-size:11px;">${escapeHtml(cabang.alamat)}</div>` : ""}
-      <div class="center" style="color:#666;">Jurnal Terapi Anak</div>
+      ${kop ? `<div class="center" style="font-size:11px; white-space:pre-line;">${escapeHtml(kop)}</div>` : `<div class="center" style="color:#666;">Jurnal Terapi Anak</div>`}
       <div class="line">──────────────</div>
       <div>No. Transaksi: #${t.index_global}</div>
       <div>Tanggal: ${tanggal}, ${jam}</div>
@@ -107,9 +108,11 @@ async function cetakStrukBluetooth(t) {
     const cabang = cabangById(t.cabang_id) || { nama: "Klinik" };
     const pengaturan = AppState.pengaturanCabang && AppState.pengaturanCabang[t.cabang_id];
     const footer = (pengaturan && pengaturan.pesan_penutup_struk) || "Terima kasih atas kepercayaan Anda";
+    const kop = (pengaturan && pengaturan.kop_tambahan) || "";
 
     const lines = [
       cabang.nama,
+      ...(kop ? kop.split("\n") : []),
       "No: #" + t.index_global,
       t.tanggal,
       "Klien: " + t.nama_klien,

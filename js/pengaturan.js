@@ -6,6 +6,8 @@ let openSettingsSection = "";
 let masterTerapisCache = [];
 let masterLayananCache = [];
 let grafikTxCache = [];
+let grafikDari = AppState.selectedDate;
+let grafikKe = AppState.selectedDate;
 
 async function loadPengaturanCabang() {
   const { data } = await supabaseClient.from("pengaturan_cabang").select("*");
@@ -16,45 +18,66 @@ async function loadPengaturanCabang() {
 async function renderPengaturanTab() {
   await loadPengaturanCabang();
 
-  if (AppState.selectedCabangId === "semua") {
-    document.getElementById("pengaturan-content").innerHTML =
-      `<p class="muted">Pilih cabang tertentu di atas (bukan "Semua cabang") untuk mengatur lokasi, master data, atau preferensi struk cabang tersebut.</p>`;
-    return;
+  // cabangId null berarti sedang lihat "Semua cabang" (khusus keuangan/pengawas).
+  // Bagian yang memang milik 1 cabang spesifik (lokasi, master data, struk,
+  // notifikasi) tetap wajib pilih cabang tertentu — tapi Grafik, Keamanan,
+  // dan Data & backup tetap bisa dipakai dalam mode gabungan semua cabang.
+  const cabangId = AppState.selectedCabangId === "semua" ? null : AppState.selectedCabangId;
+
+  if (cabangId) {
+    const { data: terapisData } = await supabaseClient.from("master_terapis").select("*").eq("cabang_id", cabangId);
+    const { data: layananData } = await supabaseClient.from("master_layanan").select("*").eq("cabang_id", cabangId);
+    masterTerapisCache = terapisData || [];
+    masterLayananCache = layananData || [];
+  } else {
+    masterTerapisCache = [];
+    masterLayananCache = [];
   }
-  const cabangId = AppState.selectedCabangId;
 
-  const { data: terapisData } = await supabaseClient.from("master_terapis").select("*").eq("cabang_id", cabangId);
-  const { data: layananData } = await supabaseClient.from("master_layanan").select("*").eq("cabang_id", cabangId);
-  masterTerapisCache = terapisData || [];
-  masterLayananCache = layananData || [];
-
-  const { data: txHariIni } = await supabaseClient
-    .from("transaksi").select("metode, harga")
-    .eq("cabang_id", cabangId).eq("tanggal", AppState.selectedDate).eq("dihapus", false);
-  grafikTxCache = txHariIni || [];
-
+  await loadGrafikData(cabangId);
   renderSettingsSections(cabangId);
 }
 
-function renderSettingsSections(cabangId) {
-  const cabang = cabangById(cabangId) || {};
-  const pengaturan = AppState.pengaturanCabang[cabangId] || { ukuran_kertas_struk: "58", pesan_penutup_struk: "Terima kasih atas kepercayaan Anda" };
+async function loadGrafikData(cabangId) {
+  let query = supabaseClient
+    .from("transaksi").select("metode, harga")
+    .gte("tanggal", grafikDari).lte("tanggal", grafikKe)
+    .eq("dihapus", false);
+  if (cabangId) query = query.eq("cabang_id", cabangId);
 
+  const { data } = await query;
+  grafikTxCache = data || [];
+}
+
+function renderSettingsSections(cabangId) {
+  const cabang = cabangId ? (cabangById(cabangId) || {}) : {};
+  const pengaturan = (cabangId && AppState.pengaturanCabang[cabangId]) || {
+    ukuran_kertas_struk: "58",
+    pesan_penutup_struk: "Terima kasih atas kepercayaan Anda",
+    kop_tambahan: "",
+    batas_saldo_minimum: 300000,
+  };
+  const pilihCabangDulu = `<p class="muted">Pilih cabang tertentu di atas (bukan "Semua cabang") untuk mengatur bagian ini.</p>`;
+
+  // Grafik metode pembayaran SENGAJA tidak dimasukkan sama sekali ke daftar
+  // untuk peran Kasir — bukan cuma disembunyikan tampilannya, section-nya
+  // memang tidak pernah dirender untuk Kasir.
   const sections = [
-    { key: "lokasi", title: "Info lokasi", editable: isPengawas() },
-    { key: "master", title: "Master data", editable: isPengawas() },
-    { key: "grafik", title: "Grafik metode pembayaran", editable: true },
-    { key: "keamanan", title: "Keamanan", editable: true },
-    { key: "struk", title: "Preferensi struk", editable: isPengawas() },
-    { key: "notifikasi", title: "Notifikasi saldo kas", editable: isPengawas() },
-    { key: "backup", title: "Data dan backup", editable: true },
+    { key: "lokasi", title: "Info lokasi" },
+    { key: "master", title: "Master data" },
+    ...(isKasir() ? [] : [{ key: "grafik", title: "Grafik metode pembayaran" }]),
+    { key: "keamanan", title: "Keamanan" },
+    { key: "struk", title: "Preferensi struk" },
+    { key: "notifikasi", title: "Notifikasi saldo kas" },
+    { key: "backup", title: "Data dan backup" },
   ];
 
   const html = sections.map((s) => {
     let body = "";
     if (openSettingsSection === s.key) {
       if (s.key === "lokasi") {
-        body = s.editable ? `
+        if (!cabangId) body = pilihCabangDulu;
+        else body = isPengawas() ? `
           <label>Nama cabang</label>
           <input type="text" id="set-cabang-nama" value="${escapeHtml(cabang.nama || "")}" />
           <label>Alamat</label>
@@ -62,22 +85,12 @@ function renderSettingsSections(cabangId) {
           <button class="btn-ghost small" data-set-action="simpan-lokasi" style="margin-top:8px;">Simpan</button>
         ` : `<p class="muted">Hanya pengawas yang bisa mengubah info lokasi.</p>`;
       } else if (s.key === "master") {
-        body = renderMasterDataSection();
+        body = !cabangId ? pilihCabangDulu : renderMasterDataSection();
       } else if (s.key === "grafik") {
-        const totalBy = (m) => grafikTxCache.filter((t) => t.metode === m).reduce((a, t) => a + Number(t.harga), 0);
-        const cash = totalBy("cash"), transfer = totalBy("transfer"), qris = totalBy("qris");
-        const maxV = Math.max(cash, transfer, qris, 1);
-        const bar = (label, val, color) => {
-          const pct = Math.round((val / maxV) * 100);
-          return `<div class="bar-row">
-            <div class="bar-label"><span>${label}</span><span>${formatRupiah(val)}</span></div>
-            <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${color};"></div></div>
-          </div>`;
-        };
-        body = `<p class="muted" style="margin:8px 0;">Tanggal ${AppState.selectedDate}</p>` +
-          bar("Cash", cash, "var(--blue)") + bar("Transfer", transfer, "#2f8a4e") + bar("QRIS", qris, "var(--amber)");
+        body = renderGrafikSection();
       } else if (s.key === "notifikasi") {
-        body = isPengawas() ? `
+        if (!cabangId) body = pilihCabangDulu;
+        else body = isPengawas() ? `
           <label>Beri tahu kalau saldo kas operasional di bawah:</label>
           <input type="text" id="set-batas-saldo" inputmode="numeric" value="${Math.round(pengaturan.batas_saldo_minimum || 300000)}" />
           <button class="btn-ghost small" data-set-action="simpan-notifikasi" style="margin-top:8px;">Simpan</button>
@@ -85,12 +98,15 @@ function renderSettingsSections(cabangId) {
       } else if (s.key === "keamanan") {
         body = `<p class="muted">PIN app-level sudah digantikan login akun Supabase Auth. Untuk mengganti kata sandi akun, gunakan menu "Forgot password" di layar login, atau minta pengawas mengatur ulang lewat Supabase Dashboard.</p>`;
       } else if (s.key === "struk") {
-        body = isPengawas() ? `
+        if (!cabangId) body = pilihCabangDulu;
+        else body = isPengawas() ? `
           <label>Ukuran kertas</label>
           <select id="set-paper">
             <option value="58" ${pengaturan.ukuran_kertas_struk === "58" ? "selected" : ""}>58mm</option>
             <option value="80" ${pengaturan.ukuran_kertas_struk === "80" ? "selected" : ""}>80mm</option>
           </select>
+          <label>Kop / header tambahan struk (nama klinik, kontak, dsb — boleh beberapa baris)</label>
+          <textarea id="set-kop" rows="3" style="width:100%; font-family:inherit; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius);">${escapeHtml(pengaturan.kop_tambahan || "")}</textarea>
           <label>Pesan penutup struk</label>
           <input type="text" id="set-footer" value="${escapeHtml(pengaturan.pesan_penutup_struk)}" />
           <button class="btn-ghost small" data-set-action="simpan-struk" style="margin-top:8px;">Simpan</button>
@@ -107,6 +123,38 @@ function renderSettingsSections(cabangId) {
   }).join("");
 
   document.getElementById("pengaturan-content").innerHTML = html;
+}
+
+function renderGrafikSection() {
+  const totalBy = (m) => grafikTxCache.filter((t) => t.metode === m).reduce((a, t) => a + Number(t.harga), 0);
+  const cash = totalBy("cash"), transfer = totalBy("transfer"), qris = totalBy("qris");
+  const maxV = Math.max(cash, transfer, qris, 1);
+  const bar = (label, val, color) => {
+    const pct = Math.round((val / maxV) * 100);
+    return `<div class="bar-row">
+      <div class="bar-label"><span>${label}</span><span>${formatRupiah(val)}</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${color};"></div></div>
+    </div>`;
+  };
+  const cakupan = AppState.selectedCabangId === "semua" ? "Semua cabang" : (cabangById(AppState.selectedCabangId) || {}).nama;
+
+  return `
+    <div style="display:flex; gap:8px; align-items:flex-end; margin:8px 0 12px; flex-wrap:wrap;">
+      <div>
+        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Dari tanggal</label>
+        <input type="date" id="grafik-dari" value="${grafikDari}" />
+      </div>
+      <div>
+        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Sampai tanggal</label>
+        <input type="date" id="grafik-ke" value="${grafikKe}" />
+      </div>
+      <button class="btn-ghost small" data-set-action="terapkan-grafik">Terapkan</button>
+    </div>
+    <p class="muted" style="margin:0 0 8px;">${escapeHtml(cakupan)} · ${grafikDari === grafikKe ? grafikDari : grafikDari + " s/d " + grafikKe}</p>
+    ${bar("Cash", cash, "var(--blue)")}
+    ${bar("Transfer", transfer, "#2f8a4e")}
+    ${bar("QRIS", qris, "var(--amber)")}
+  `;
 }
 
 function renderMasterDataSection() {
@@ -139,13 +187,20 @@ document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-set-action]");
   if (!btn) return;
   const action = btn.dataset.setAction;
-  if (AppState.selectedCabangId === "semua") return; // jaga-jaga: tombol ini seharusnya tidak muncul saat "Semua cabang" dipilih
-  const cabangId = AppState.selectedCabangId;
+  const cabangId = AppState.selectedCabangId === "semua" ? null : AppState.selectedCabangId;
 
   if (action === "toggle") {
     openSettingsSection = openSettingsSection === btn.dataset.key ? "" : btn.dataset.key;
     renderSettingsSections(cabangId);
   }
+  if (action === "terapkan-grafik") {
+    grafikDari = document.getElementById("grafik-dari").value || AppState.selectedDate;
+    grafikKe = document.getElementById("grafik-ke").value || AppState.selectedDate;
+    await loadGrafikData(cabangId);
+    renderSettingsSections(cabangId);
+  }
+  if (!cabangId) return; // aksi di bawah ini semua butuh 1 cabang spesifik
+
   if (action === "simpan-lokasi") {
     const nama = document.getElementById("set-cabang-nama").value.trim();
     const alamat = document.getElementById("set-cabang-alamat").value.trim();
@@ -157,8 +212,9 @@ document.addEventListener("click", async (e) => {
   if (action === "simpan-struk") {
     const ukuran = document.getElementById("set-paper").value;
     const footer = document.getElementById("set-footer").value.trim();
+    const kop = document.getElementById("set-kop").value;
     await supabaseClient.from("pengaturan_cabang").upsert({
-      cabang_id: cabangId, ukuran_kertas_struk: ukuran, pesan_penutup_struk: footer,
+      cabang_id: cabangId, ukuran_kertas_struk: ukuran, pesan_penutup_struk: footer, kop_tambahan: kop,
     });
     await loadPengaturanCabang();
     renderSettingsSections(cabangId);

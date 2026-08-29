@@ -41,7 +41,7 @@ function renderCabangBar() {
   const wrap = document.getElementById("tambah-cabang-wrap");
   let options = "";
 
-  if (isPengawas()) {
+  if (isPengawas() || isKeuangan()) {
     options += `<option value="semua" ${AppState.selectedCabangId === "semua" ? "selected" : ""}>Semua cabang</option>`;
   }
   AppState.cabangList.forEach((c) => {

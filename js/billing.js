@@ -263,24 +263,28 @@ PECAHAN.forEach((p) => { pecahanCount[p] = 0; });
 
 async function renderTutupKasCard() {
   const card = document.getElementById("tutup-kas-card");
-  card.hidden = !isKasir();
-  if (!isKasir()) return;
+  card.hidden = !(isKasir() || isPengawas());
+  if (!isKasir() && !isPengawas()) return;
 
-  const inputsBox = document.getElementById("pecahan-inputs");
-  inputsBox.innerHTML = PECAHAN.map((p) => `
-    <div>
-      <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">${formatRupiah(p)} × lembar</label>
-      <input type="number" min="0" data-pecahan="${p}" value="${pecahanCount[p]}" />
-    </div>`).join("");
+  document.getElementById("tutup-kas-form-area").hidden = !isKasir();
 
-  inputsBox.querySelectorAll("input[data-pecahan]").forEach((inp) => {
-    inp.addEventListener("input", function () {
-      pecahanCount[Number(this.dataset.pecahan)] = parseInt(this.value, 10) || 0;
-      updateTutupKasHasil();
+  if (isKasir()) {
+    const inputsBox = document.getElementById("pecahan-inputs");
+    inputsBox.innerHTML = PECAHAN.map((p) => `
+      <div>
+        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">${formatRupiah(p)} × lembar</label>
+        <input type="number" min="0" data-pecahan="${p}" value="${pecahanCount[p]}" />
+      </div>`).join("");
+
+    inputsBox.querySelectorAll("input[data-pecahan]").forEach((inp) => {
+      inp.addEventListener("input", function () {
+        pecahanCount[Number(this.dataset.pecahan)] = parseInt(this.value, 10) || 0;
+        updateTutupKasHasil();
+      });
     });
-  });
+    updateTutupKasHasil();
+  }
 
-  updateTutupKasHasil();
   await renderRiwayatTutupKas();
 }
 
@@ -333,7 +337,14 @@ async function simpanTutupKas() {
 }
 
 async function renderRiwayatTutupKas() {
-  const cabangId = AppState.selectedCabangId === "semua" ? AppState.profile.cabang_id : AppState.selectedCabangId;
+  const box = document.getElementById("tutup-kas-riwayat");
+
+  if (AppState.selectedCabangId === "semua") {
+    box.innerHTML = `<p class="muted">Pilih cabang tertentu di atas untuk melihat riwayat penutupan kas.</p>`;
+    return;
+  }
+  const cabangId = AppState.selectedCabangId;
+
   const { data } = await supabaseClient
     .from("penutupan_kas_harian")
     .select("*")
@@ -341,16 +352,31 @@ async function renderRiwayatTutupKas() {
     .eq("tanggal", AppState.selectedDate)
     .order("dibuat_pada", { ascending: false });
 
-  const box = document.getElementById("tutup-kas-riwayat");
   if (!data || data.length === 0) { box.innerHTML = ""; return; }
 
   box.innerHTML = `<p style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Riwayat penutupan kas tanggal ini:</p>` +
     data.map((r) => {
       const statusClass = Number(r.selisih) === 0 ? "badge-ok" : "badge-warn";
       const statusText = Number(r.selisih) === 0 ? "sesuai" : (r.selisih < 0 ? "kurang " + formatRupiah(Math.abs(r.selisih)) : "lebih " + formatRupiah(r.selisih));
-      return `<div class="row-meta">${formatRupiah(r.total_dihitung)} oleh ${escapeHtml(r.dihitung_oleh)} — <span class="${statusClass}">${statusText}</span></div>`;
+      const hapusBtn = isPengawas()
+        ? `<button class="btn-ghost small" data-action="hapus-tutup-kas" data-id="${r.id}" style="margin-left:8px;">Hapus</button>`
+        : "";
+      return `<div class="row-meta">${formatRupiah(r.total_dihitung)} oleh ${escapeHtml(r.dihitung_oleh)} — <span class="${statusClass}">${statusText}</span>${hapusBtn}</div>`;
     }).join("");
 }
+
+async function hapusPenutupanKas(id) {
+  if (!confirm("Hapus catatan penutupan kas ini? Tindakan ini tidak bisa dibatalkan.")) return;
+  const { error } = await supabaseClient.from("penutupan_kas_harian").delete().eq("id", id);
+  if (error) { alert("Gagal menghapus: " + error.message); return; }
+  await catatLogAudit("hapus_penutupan_kas", "penutupan_kas_harian", id);
+  await renderTutupKasCard();
+}
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest('[data-action="hapus-tutup-kas"]');
+  if (btn) hapusPenutupanKas(btn.dataset.id);
+});
 
 document.getElementById("btn-simpan-tutup-kas").addEventListener("click", simpanTutupKas);
 
