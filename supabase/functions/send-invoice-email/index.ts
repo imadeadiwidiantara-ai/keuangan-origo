@@ -82,16 +82,31 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Ambil kop tambahan & pesan penutup dari Pengaturan cabang yang sama
+    // dipakai struk cetak — supaya isi email konsisten dengan struk fisik.
+    const { data: pengaturan } = await supabaseAdmin
+      .from("pengaturan_cabang")
+      .select("kop_tambahan, pesan_penutup_struk")
+      .eq("cabang_id", t.cabang_id)
+      .maybeSingle();
+
+    const kopHtml = pengaturan?.kop_tambahan
+      ? `<p style="color:#666; white-space:pre-line; margin:0 0 8px;">${pengaturan.kop_tambahan}</p>`
+      : "";
+    const footerText = pengaturan?.pesan_penutup_struk || "Terima kasih atas kepercayaan Anda.";
+
     const html = `
       <div style="font-family:sans-serif; max-width:400px;">
-        <h2>${t.cabang?.nama || "Klinik"}</h2>
+        <h2 style="margin-bottom:4px;">${t.cabang?.nama || "Klinik"}</h2>
+        ${t.cabang?.alamat ? `<p style="color:#666; margin:0 0 8px;">${t.cabang.alamat}</p>` : ""}
+        ${kopHtml}
         <p>No. Transaksi: #${t.index_global}</p>
         <p>Tanggal: ${t.tanggal}</p>
         <hr />
         <p>Klien: ${t.nama_klien}<br/>Terapis: ${t.terapis}<br/>Metode: ${t.metode.toUpperCase()}</p>
         <hr />
         <p><strong>Total: Rp ${Number(t.harga).toLocaleString("id-ID")}</strong></p>
-        <p style="color:#666;">Terima kasih atas kepercayaan Anda.</p>
+        <p style="color:#666;">${footerText}</p>
       </div>`;
 
     const resendResp = await fetch("https://api.resend.com/emails", {
